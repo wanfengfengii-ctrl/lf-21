@@ -12,21 +12,44 @@
           :is-negative="abacusStore.isNegative"
           :interactive="true"
           :highlighted-rod="abacusStore.highlightedRod"
-          :error-rods="levelStore.errorRodIndices"
-          :is-sign-error="levelStore.isSignError"
-          :sign-error-expected="levelStore.signErrorExpected"
+          :error-rods="levelStore.displayErrorRodIndices"
+          :is-sign-error="levelStore.displaySignError"
+          :sign-error-expected="levelStore.displaySignErrorExpected"
           @bead-click="handleBeadClick"
           @bead-drag="handleBeadDrag"
           @toggle-sign="handleToggleSign"
         />
+        <div class="game-options">
+          <n-switch
+            v-model:value="realTimeEnabled"
+            @update:value="handleRealTimeToggle"
+            checked-value="on"
+            unchecked-value="off"
+          >
+            <template #checked>🔍 实时纠错</template>
+            <template #unchecked>实时纠错</template>
+          </n-switch>
+        </div>
         <div class="game-actions">
-          <n-button @click="showAnswerOnAbacus" v-if="!levelStore.isQuestionAnswering && levelStore.currentQuestion">
-            显示答案
+          <n-button
+            @click="showAnswerOnAbacus"
+            :disabled="!levelStore.canShowAnswer"
+            :type="levelStore.canShowAnswer ? 'default' : 'default'"
+          >
+            {{ levelStore.canShowAnswer ? '显示答案' : '答题中不可查看' }}
           </n-button>
           <n-button @click="clearAbacus">清空算盘</n-button>
-          <n-button @click="showStandardSteps" v-if="levelStore.currentQuestion">
-            查看标准步骤
+          <n-button
+            @click="showStandardSteps"
+            :disabled="!levelStore.canShowSteps"
+          >
+            {{ levelStore.canShowSteps ? '查看标准步骤' : '答题中不可查看' }}
           </n-button>
+        </div>
+        <div class="realtime-tip" v-if="realTimeEnabled && levelStore.isQuestionAnswering">
+          <n-alert type="info" :show-icon="true" size="small">
+            💡 已开启实时纠错，错误档位会标红提示
+          </n-alert>
         </div>
       </div>
       <div class="panel-section">
@@ -67,7 +90,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, NModal } from 'naive-ui'
+import { NButton, NModal, NSwitch, NAlert } from 'naive-ui'
 import Abacus from './Abacus.vue'
 import LevelSelect from './LevelSelect.vue'
 import LevelGame from './LevelGame.vue'
@@ -79,9 +102,18 @@ const abacusStore = useAbacusStore()
 const levelStore = useLevelStore()
 
 const showStepsModal = ref(false)
+const realTimeEnabled = ref(false)
 
 const isPlaying = computed(() => levelStore.isLevelStarted)
 const showResult = computed(() => levelStore.showLevelResult)
+
+function handleRealTimeToggle(value: string) {
+  const enabled = value === 'on'
+  levelStore.toggleRealTimeCheck(enabled)
+  if (enabled && levelStore.isQuestionAnswering) {
+    levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+  }
+}
 
 function handleStartLevel(levelId: number) {
   abacusStore.resetAbacus()
@@ -89,6 +121,9 @@ function handleStartLevel(levelId: number) {
   
   if (levelStore.currentQuestion) {
     levelStore.addUserReplayFrame(abacusStore.abacusState, '初始状态')
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 }
 
@@ -100,6 +135,9 @@ function handleBeadClick(rodIndex: number, type: 'upper' | 'lower', beadIndex: n
       abacusStore.abacusState,
       `点击第 ${13 - rodIndex} 档${type === 'upper' ? '上珠' : '下珠'}`
     )
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 }
 
@@ -111,6 +149,9 @@ function handleBeadDrag(rodIndex: number, type: 'upper' | 'lower', value: number
       abacusStore.abacusState,
       `拖动第 ${13 - rodIndex} 档${type === 'upper' ? '上珠' : '下珠'}`
     )
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 }
 
@@ -122,6 +163,9 @@ function handleToggleSign() {
       abacusStore.abacusState,
       '切换正负号'
     )
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 }
 
@@ -129,17 +173,22 @@ function clearAbacus() {
   abacusStore.resetAbacus()
   if (levelStore.isQuestionAnswering) {
     levelStore.addUserReplayFrame(abacusStore.abacusState, '清空算盘')
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 }
 
 function showAnswerOnAbacus() {
-  if (levelStore.currentQuestion) {
+  if (levelStore.currentQuestion && levelStore.canShowAnswer) {
     abacusStore.setNumber(levelStore.currentQuestion.answer)
   }
 }
 
 function showStandardSteps() {
-  showStepsModal.value = true
+  if (levelStore.canShowSteps) {
+    showStepsModal.value = true
+  }
 }
 
 function handleExitLevel() {
@@ -159,6 +208,9 @@ function handleRetry() {
     
     if (levelStore.currentQuestion) {
       levelStore.addUserReplayFrame(abacusStore.abacusState, '初始状态')
+      if (realTimeEnabled.value) {
+        levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+      }
     }
   }
 }
@@ -172,6 +224,9 @@ function handleNextLevel() {
     
     if (levelStore.currentQuestion) {
       levelStore.addUserReplayFrame(abacusStore.abacusState, '初始状态')
+      if (realTimeEnabled.value) {
+        levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+      }
     }
   }
 }
@@ -185,6 +240,9 @@ watch(() => levelStore.currentQuestion, (newQuestion) => {
   if (newQuestion && levelStore.isQuestionAnswering) {
     abacusStore.resetAbacus()
     levelStore.addUserReplayFrame(abacusStore.abacusState, '初始状态')
+    if (realTimeEnabled.value) {
+      levelStore.realTimeCheckAbacus(abacusStore.abacusState)
+    }
   }
 })
 </script>
@@ -225,6 +283,18 @@ watch(() => levelStore.currentQuestion, (newQuestion) => {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+.game-options {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.realtime-tip {
+  width: 100%;
+  max-width: 500px;
 }
 
 .result-layout {

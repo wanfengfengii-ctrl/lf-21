@@ -192,6 +192,10 @@ export const useLevelStore = defineStore('level', () => {
   const userReplayFrames = ref<ReplayFrame[]>([])
   const standardReplayFrames = ref<ReplayFrame[]>([])
   const currentReplayData = ref<ReplayData | null>(null)
+  const realTimeCheck = ref(false)
+  const realTimeErrors = ref<UserOperationError[]>([])
+  const realTimeSignError = ref(false)
+  const realTimeSignExpected = ref(false)
 
   const completedLevels = computed(() => levels.value.filter(l => l.completed).length)
   const unlockedLevels = computed(() => levels.value.filter(l => l.unlocked).length)
@@ -207,6 +211,48 @@ export const useLevelStore = defineStore('level', () => {
   const currentProgress = computed(() => {
     if (!currentLevel.value) return 0
     return (currentQuestionIndex.value / currentLevel.value.questionCount) * 100
+  })
+
+  const realTimeErrorRodIndices = computed(() => {
+    return realTimeErrors.value
+      .filter(e => e.rodIndex >= 0)
+      .map(e => e.rodIndex)
+  })
+
+  const displayErrors = computed(() => {
+    if (realTimeCheck.value && isQuestionAnswering.value) {
+      return realTimeErrors.value
+    }
+    return operationErrors.value
+  })
+
+  const displayErrorRodIndices = computed(() => {
+    if (realTimeCheck.value && isQuestionAnswering.value) {
+      return realTimeErrorRodIndices.value
+    }
+    return errorRodIndices.value
+  })
+
+  const displaySignError = computed(() => {
+    if (realTimeCheck.value && isQuestionAnswering.value) {
+      return realTimeSignError.value
+    }
+    return isSignError.value
+  })
+
+  const displaySignErrorExpected = computed(() => {
+    if (realTimeCheck.value && isQuestionAnswering.value) {
+      return realTimeSignExpected.value
+    }
+    return signErrorExpected.value
+  })
+
+  const canShowAnswer = computed(() => {
+    return !isQuestionAnswering.value
+  })
+
+  const canShowSteps = computed(() => {
+    return !isQuestionAnswering.value
   })
 
   function startLevel(levelId: number) {
@@ -243,6 +289,9 @@ export const useLevelStore = defineStore('level', () => {
     isSignError.value = false
     signErrorExpected.value = false
     currentErrorRodIndices.value = []
+    realTimeErrors.value = []
+    realTimeSignError.value = false
+    realTimeSignExpected.value = false
     userReplayFrames.value = []
     standardReplayFrames.value = generateStandardFrames(question)
   }
@@ -256,6 +305,27 @@ export const useLevelStore = defineStore('level', () => {
       timestamp: Date.now() - questionStartTime.value,
       description
     })
+  }
+
+  function realTimeCheckAbacus(abacusState: AbacusState): void {
+    if (!realTimeCheck.value || !currentQuestion.value || !isQuestionAnswering.value) return
+
+    const expectedState = numberToAbacusState(currentQuestion.value.answer, abacusState.decimalPosition)
+    const errors = compareAbacusStates(abacusState, expectedState)
+    
+    realTimeErrors.value = errors
+    realTimeSignError.value = errors.some(e => e.rodIndex === -1)
+    const signError = errors.find(e => e.rodIndex === -1)
+    realTimeSignExpected.value = signError ? signError.expectedValue === 1 : false
+  }
+
+  function toggleRealTimeCheck(enabled: boolean) {
+    realTimeCheck.value = enabled
+    if (!enabled) {
+      realTimeErrors.value = []
+      realTimeSignError.value = false
+      realTimeSignExpected.value = false
+    }
   }
 
   function checkAbacusAnswer(abacusState: AbacusState): boolean {
@@ -604,6 +674,17 @@ export const useLevelStore = defineStore('level', () => {
     userReplayFrames,
     standardReplayFrames,
     currentReplayData,
+    realTimeCheck,
+    realTimeErrors,
+    realTimeSignError,
+    realTimeSignExpected,
+    realTimeErrorRodIndices,
+    displayErrors,
+    displayErrorRodIndices,
+    displaySignError,
+    displaySignErrorExpected,
+    canShowAnswer,
+    canShowSteps,
     completedLevels,
     unlockedLevels,
     totalStars,
@@ -613,6 +694,8 @@ export const useLevelStore = defineStore('level', () => {
     nextQuestion,
     checkAbacusAnswer,
     addUserReplayFrame,
+    realTimeCheckAbacus,
+    toggleRealTimeCheck,
     getLearningReport,
     clearWrongQuestions,
     clearAllProgress,

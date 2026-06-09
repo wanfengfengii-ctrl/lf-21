@@ -45,6 +45,27 @@
       <n-button text type="primary" @click="showTips = true">💡 查看提示</n-button>
     </div>
 
+    <div v-if="hasRealTimeErrors" class="realtime-error-section">
+      <n-alert type="warning" :show-icon="true" size="small">
+        <template #header>
+          ⚠️ 实时纠错 ({{ realTimeErrorCount }} 处错误)
+        </template>
+        <div class="realtime-error-list">
+          <span
+            v-for="(error, idx) in displayErrors.slice(0, 5)"
+            :key="idx"
+            class="realtime-error-item"
+          >
+            <n-tag type="error" size="small">{{ error.rodLabel }}</n-tag>
+            <span class="realtime-error-desc">{{ error.description }}</span>
+          </span>
+          <span v-if="displayErrors.length > 5" class="more-errors">
+            还有 {{ displayErrors.length - 5 }} 处错误...
+          </span>
+        </div>
+      </n-alert>
+    </div>
+
     <div class="action-section">
       <n-button type="primary" size="large" @click="checkAnswer" :disabled="!isAnswering">
         ✅ 检查答案
@@ -141,6 +162,11 @@ const hasMoreQuestions = computed(() => questionIndex.value + 1 < totalQuestions
 const hasReplayData = computed(() => levelStore.currentReplayData !== null)
 const currentReplayData = computed(() => levelStore.currentReplayData)
 const currentTip = computed(() => levelStore.getHintForCurrentQuestion())
+const displayErrors = computed(() => levelStore.displayErrors)
+const hasRealTimeErrors = computed(() => {
+  return levelStore.realTimeCheck && levelStore.isQuestionAnswering && levelStore.displayErrors.length > 0
+})
+const realTimeErrorCount = computed(() => levelStore.displayErrors.length)
 
 const difficultyTagType = computed(() => {
   const diff = currentLevel.value?.difficulty as DifficultyLevel
@@ -334,6 +360,42 @@ watch(isAnswering, (newVal) => {
 
 .tips-toggle {
   text-align: center;
+}
+
+.realtime-error-section {
+  background: white;
+  border-radius: 12px;
+  padding: 0;
+}
+
+.realtime-error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.realtime-error-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: #fff7e6;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.realtime-error-desc {
+  font-size: 12px;
+  color: #666;
+  flex: 1;
+}
+
+.more-errors {
+  font-size: 12px;
+  color: #999;
+  text-align: center;
+  padding: 4px 0;
 }
 
 .action-section {

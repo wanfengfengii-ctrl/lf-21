@@ -164,47 +164,196 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="showDetailModal" preset="card" :title="currentTask?.title || '任务详情'" style="width: 700px">
+    <n-modal v-model:show="showDetailModal" preset="card" :title="currentTask?.title || '任务详情'" style="width: 800px">
       <div v-if="currentTask" class="task-detail">
-        <n-descriptions :column="2" bordered label-style="width: 100px">
-          <n-descriptions-item label="任务类型">
-            {{ currentTask.config.type === 'level' ? '关卡作业' : '练习任务' }}
-          </n-descriptions-item>
-          <n-descriptions-item label="题目数量">
-            {{ currentTask.config.questionCount }} 题
-          </n-descriptions-item>
-          <n-descriptions-item label="创建时间">
-            {{ formatDateTime(currentTask.createdAt) }}
-          </n-descriptions-item>
-          <n-descriptions-item label="截止时间">
-            {{ currentTask.deadline ? formatDateTime(currentTask.deadline) : '无限制' }}
-          </n-descriptions-item>
-          <n-descriptions-item label="完成率" :span="2">
-            {{ getTaskCompletionRate(currentTask.id) }}%
-          </n-descriptions-item>
-        </n-descriptions>
+        <div class="detail-header">
+          <n-descriptions :column="3" bordered label-style="width: 80px">
+            <n-descriptions-item label="任务类型">
+              {{ currentTask.config.type === 'level' ? '关卡作业' : '练习任务' }}
+            </n-descriptions-item>
+            <n-descriptions-item label="题目数量">
+              {{ currentTask.config.questionCount }} 题
+            </n-descriptions-item>
+            <n-descriptions-item label="截止时间">
+              {{ currentTask.deadline ? formatDateTime(currentTask.deadline) : '无限制' }}
+            </n-descriptions-item>
+          </n-descriptions>
+        </div>
 
-        <n-divider title="完成情况" />
+        <n-divider title="提交统计" />
+
+        <n-grid :cols="5" :x-gap="12" class="status-stats">
+          <n-gi>
+            <n-card class="status-card not-started" :bordered="false" size="small">
+              <div class="status-num">{{ getStatusCount('not_started') }}</div>
+              <div class="status-label">未开始</div>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="status-card in-progress" :bordered="false" size="small">
+              <div class="status-num">{{ getStatusCount('in_progress') }}</div>
+              <div class="status-label">进行中</div>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="status-card submitted" :bordered="false" size="small">
+              <div class="status-num">{{ getStatusCount('submitted') }}</div>
+              <div class="status-label">已提交</div>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="status-card overdue" :bordered="false" size="small">
+              <div class="status-num">{{ getStatusCount('overdue') }}</div>
+              <div class="status-label">已逾期</div>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="status-card graded" :bordered="false" size="small">
+              <div class="status-num">{{ getStatusCount('graded') }}</div>
+              <div class="status-label">已批改</div>
+            </n-card>
+          </n-gi>
+        </n-grid>
+
+        <div class="detail-actions">
+          <n-button size="small" @click="sendReminder" :disabled="getReminderDisabled()">
+            <template #icon><span>📢</span></template>
+            催交
+          </n-button>
+          <n-button size="small" type="primary" @click="reassignAll">
+            <template #icon><span>🔄</span></template>
+            重新布置
+          </n-button>
+        </div>
+
+        <n-divider title="提交列表" />
 
         <n-data-table
           :columns="submissionColumns"
           :data="taskSubmissions"
-          :pagination="{ pageSize: 5 }"
-          :row-key="row => row.studentId"
+          :pagination="{ pageSize: 6 }"
+          :row-key="row => row.id"
           size="small"
         />
+      </div>
+    </n-modal>
 
-        <n-divider title="教师评语" />
-        <div class="comment-section">
-          <div v-for="comment in taskComments" :key="comment.id" class="comment-item">
-            <div class="comment-header">
-              <strong>{{ getStudentName(comment.studentId) }}</strong>
-              <span class="comment-time">{{ formatDateTime(comment.createdAt) }}</span>
+    <n-modal v-model:show="showSubmissionModal" preset="card" :title="submissionDetailTitle" style="width: 700px">
+      <div v-if="currentSubmission" class="submission-detail">
+        <n-descriptions :column="2" bordered label-style="width: 90px">
+          <n-descriptions-item label="学生">
+            {{ getStudentName(currentSubmission.studentId) }}
+          </n-descriptions-item>
+          <n-descriptions-item label="提交状态">
+            <n-tag :type="getSubmissionStatusType(currentSubmission.status)" size="small">
+              {{ getSubmissionStatusLabel(currentSubmission.status) }}
+            </n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="得分">
+            <n-tag type="success" size="large">{{ currentSubmission.score }}分</n-tag>
+          </n-descriptions-item>
+          <n-descriptions-item label="教师评分">
+            <span v-if="currentSubmission.teacherScore !== undefined">
+              {{ currentSubmission.teacherScore }}分
+            </span>
+            <span v-else class="text-muted">待批改</span>
+          </n-descriptions-item>
+          <n-descriptions-item label="正确数">
+            {{ currentSubmission.correctCount }} / {{ currentSubmission.totalQuestions }}
+          </n-descriptions-item>
+          <n-descriptions-item label="总用时">
+            {{ formatTime(currentSubmission.totalTime) }}
+          </n-descriptions-item>
+          <n-descriptions-item label="提交时间">
+            {{ currentSubmission.submittedAt ? formatDateTime(currentSubmission.submittedAt) : '-' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="开始时间">
+            {{ currentSubmission.startedAt ? formatDateTime(currentSubmission.startedAt) : '-' }}
+          </n-descriptions-item>
+        </n-descriptions>
+
+        <n-divider title="错题明细" v-if="currentSubmission.wrongQuestions.length > 0" />
+        <div v-if="currentSubmission.wrongQuestions.length > 0" class="wrong-questions-list">
+          <div
+            v-for="(wq, idx) in currentSubmission.wrongQuestions"
+            :key="idx"
+            class="wrong-question-item"
+          >
+            <div class="wq-header">
+              <span class="wq-num">第 {{ idx + 1 }} 题</span>
+              <span class="wq-op">{{ wq.operator }}</span>
             </div>
-            <div class="comment-content">{{ comment.content }}</div>
+            <div class="wq-content">
+              <div class="wq-question">
+                {{ wq.num1 }} {{ wq.operator }} {{ wq.num2 }} = ?
+              </div>
+              <div class="wq-answers">
+                <span class="wq-correct">正确答案: {{ wq.answer }}</span>
+                <span class="wq-user">学生答案: {{ wq.userAnswer ?? '-' }}</span>
+              </div>
+              <div class="wq-error" v-if="wq.errorDescription">
+                <n-tag size="small" type="warning">错误分析</n-tag>
+                <span>{{ wq.errorDescription }}</span>
+              </div>
+              <div class="wq-rods" v-if="wq.errorRods && wq.errorRods.length > 0">
+                <span class="wq-rods-label">错误档位:</span>
+                <n-tag
+                  v-for="rod in wq.errorRods"
+                  :key="rod"
+                  size="small"
+                  type="error"
+                >
+                  第 {{ 13 - rod }} 档
+                </n-tag>
+              </div>
+            </div>
           </div>
-          <div v-if="taskComments.length === 0" class="empty-comments">
-            暂无评语
+        </div>
+        <div v-else class="no-wrong-questions">
+          全部正确！太棒了 🎉
+        </div>
+
+        <n-divider title="教师批改" />
+        <div class="grading-section">
+          <n-form label-placement="top">
+            <n-form-item label="教师评分">
+              <n-input-number
+                v-model:value="gradeForm.score"
+                :min="0"
+                :max="100"
+                placeholder="请输入评分"
+                style="width: 150px"
+              />
+            </n-form-item>
+            <n-form-item label="教师评语">
+              <n-input
+                v-model:value="gradeForm.comment"
+                type="textarea"
+                :rows="3"
+                placeholder="请输入评语..."
+              />
+            </n-form-item>
+            <div class="grading-actions">
+              <n-button type="primary" @click="submitGrade">
+                提交批改
+              </n-button>
+              <n-button @click="reassignCurrentStudent" type="warning">
+                重新布置
+              </n-button>
+            </div>
+          </n-form>
+        </div>
+
+        <div v-if="currentSubmission.teacherComment" class="history-grade">
+          <n-divider title="历史批改记录" />
+          <div class="grade-record">
+            <div class="grade-record-header">
+              <n-tag v-if="currentSubmission.teacherScore !== undefined" type="success">
+                {{ currentSubmission.teacherScore }}分
+              </n-tag>
+              <span class="grade-time">{{ currentSubmission.gradedAt ? formatDateTime(currentSubmission.gradedAt) : '' }}</span>
+            </div>
+            <p class="grade-comment">{{ currentSubmission.teacherComment }}</p>
           </div>
         </div>
       </div>
@@ -240,7 +389,7 @@ import {
 } from 'naive-ui'
 import { useTeacherStore } from '../stores/teacher'
 import { levelConfigs } from '../data/levels'
-import type { Task, TaskSubmission } from '../types/teacher'
+import type { Task, TaskSubmission, TaskStatus, SubmissionStatus } from '../types/teacher'
 import type { DifficultyLevel } from '../types/abacus'
 
 const teacherStore = useTeacherStore()
@@ -249,8 +398,15 @@ const message = useMessage()
 const filterType = ref<string | null>(null)
 const showAddModal = ref(false)
 const showDetailModal = ref(false)
+const showSubmissionModal = ref(false)
 const isEditing = ref(false)
 const currentTask = ref<Task | null>(null)
+const currentSubmission = ref<TaskSubmission | null>(null)
+
+const gradeForm = reactive({
+  score: undefined as number | undefined,
+  comment: ''
+})
 
 const formData = reactive({
   title: '',
@@ -306,9 +462,9 @@ const taskSubmissions = computed(() => {
   return teacherStore.getSubmissionsByTask(currentTask.value.id)
 })
 
-const taskComments = computed(() => {
-  if (!currentTask.value) return []
-  return teacherStore.getCommentsByTask(currentTask.value.id)
+const submissionDetailTitle = computed(() => {
+  if (!currentSubmission.value) return '提交详情'
+  return `${getStudentName(currentSubmission.value.studentId)} 的提交详情`
 })
 
 const submissionColumns = [
@@ -319,9 +475,23 @@ const submissionColumns = [
     render: (row: TaskSubmission) => getStudentName(row.studentId)
   },
   {
+    title: '状态',
+    key: 'status',
+    width: 100,
+    render: (row: TaskSubmission) =>
+      h(
+        NTag,
+        {
+          type: getSubmissionStatusType(row.status),
+          size: 'small'
+        },
+        { default: () => getSubmissionStatusLabel(row.status) }
+      )
+  },
+  {
     title: '得分',
     key: 'score',
-    width: 100,
+    width: 80,
     render: (row: TaskSubmission) =>
       h(
         NTag,
@@ -332,17 +502,34 @@ const submissionColumns = [
         { default: () => row.score + '分' }
       )
   },
-  { title: '正确数', key: 'correctCount', width: 100 },
-  { title: '用时', key: 'totalTime', width: 120 },
-  { title: '状态', key: 'isCompleted', width: 100 },
+  { title: '正确数', key: 'correctCount', width: 90, render: (row: TaskSubmission) => `${row.correctCount}/${row.totalQuestions}` },
+  { title: '用时', key: 'totalTime', width: 100, render: (row: TaskSubmission) => formatTime(row.totalTime) },
+  {
+    title: '提交时间',
+    key: 'submittedAt',
+    width: 150,
+    render: (row: TaskSubmission) => row.submittedAt ? formatDateTime(row.submittedAt) : '-'
+  },
   {
     title: '操作',
     key: 'actions',
-    width: 80,
+    width: 180,
     render: (row: TaskSubmission) =>
-      h(NButton, { size: 'tiny', onClick: () => viewSubmission(row) }, {
-        default: () => '查看'
-      })
+      h('div', { style: 'display: flex; gap: 8px;' }, [
+        h(NButton, { size: 'tiny', type: 'primary', onClick: () => viewSubmission(row) }, {
+          default: () => '查看详情'
+        }),
+        row.status === 'submitted'
+          ? h(NButton, { size: 'tiny', type: 'success', onClick: () => quickGrade(row) }, {
+              default: () => '批改'
+            })
+          : null,
+        row.status === 'graded' || row.status === 'submitted'
+          ? h(NButton, { size: 'tiny', type: 'warning', onClick: () => reassignOne(row) }, {
+              default: () => '重布置'
+            })
+          : null
+      ])
   }
 ]
 
@@ -484,8 +671,119 @@ function resetForm() {
   currentTask.value = null
 }
 
+function formatTime(ms: number): string {
+  if (!ms) return '-'
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  if (minutes > 0) {
+    return `${minutes}分${secs}秒`
+  }
+  return `${secs}秒`
+}
+
+function getStatusCount(status: TaskStatus): number {
+  if (!currentTask.value) return 0
+  const counts = teacherStore.getTaskStatusCounts(currentTask.value.id)
+  return counts[status] || 0
+}
+
+function getSubmissionStatusLabel(status: SubmissionStatus | string): string {
+  const labels: Record<string, string> = {
+    draft: '草稿',
+    submitted: '已提交',
+    graded: '已批改'
+  }
+  return labels[status] || status
+}
+
+function getSubmissionStatusType(status: SubmissionStatus | string): 'success' | 'warning' | 'info' | 'default' {
+  const types: Record<string, 'success' | 'warning' | 'info' | 'default'> = {
+    draft: 'default',
+    submitted: 'warning',
+    graded: 'success'
+  }
+  return types[status] || 'default'
+}
+
+function getReminderDisabled(): boolean {
+  if (!currentTask.value) return true
+  return getStatusCount('not_started') + getStatusCount('in_progress') + getStatusCount('overdue') === 0
+}
+
+function sendReminder() {
+  if (!currentTask.value) return
+  teacherStore.sendTaskReminder(currentTask.value.id)
+  message.success('催交通知已发送')
+}
+
+function reassignAll() {
+  if (!currentTask.value) return
+  if (!confirm('确定要为所有已提交的学生重新布置这个任务吗？')) return
+  const students = teacherStore.getStudentsForTask(currentTask.value.id)
+  let count = 0
+  students.forEach(s => {
+    const submission = teacherStore.getTaskSubmissionDetail(currentTask.value!.id, s.id)
+    if (submission && (submission.status === 'submitted' || submission.status === 'graded')) {
+      teacherStore.reassignTask(currentTask.value!.id, s.id)
+      count++
+    }
+  })
+  message.success(`已为 ${count} 名学生重新布置任务`)
+}
+
+function reassignOne(row: TaskSubmission) {
+  if (!confirm(`确定要为 ${getStudentName(row.studentId)} 重新布置这个任务吗？`)) return
+  if (currentTask.value) {
+    teacherStore.reassignTask(currentTask.value.id, row.studentId)
+    message.success('已重新布置')
+  }
+}
+
+function reassignCurrentStudent() {
+  if (!currentSubmission.value || !currentTask.value) return
+  if (!confirm(`确定要为 ${getStudentName(currentSubmission.value.studentId)} 重新布置这个任务吗？`)) return
+  teacherStore.reassignTask(currentTask.value.id, currentSubmission.value.studentId)
+  message.success('已重新布置')
+  showSubmissionModal.value = false
+}
+
+function quickGrade(row: TaskSubmission) {
+  currentSubmission.value = row
+  gradeForm.score = row.score
+  gradeForm.comment = ''
+  showSubmissionModal.value = true
+}
+
 function viewSubmission(submission: TaskSubmission) {
-  message.info(`查看 ${getStudentName(submission.studentId)} 的提交`)
+  currentSubmission.value = submission
+  if (submission.teacherScore !== undefined) {
+    gradeForm.score = submission.teacherScore
+  } else {
+    gradeForm.score = submission.score
+  }
+  gradeForm.comment = submission.teacherComment || ''
+  showSubmissionModal.value = true
+}
+
+function submitGrade() {
+  if (!currentSubmission.value) return
+  if (gradeForm.score === undefined) {
+    message.warning('请输入评分')
+    return
+  }
+  teacherStore.gradeSubmission(currentSubmission.value.id, {
+    teacherScore: gradeForm.score,
+    teacherComment: gradeForm.comment || undefined
+  })
+  message.success('批改成功')
+  // Refresh
+  if (currentSubmission.value) {
+    const updated = teacherStore.getSubmissionById(currentSubmission.value.id)
+    if (updated) {
+      currentSubmission.value = { ...updated }
+    }
+  }
 }
 </script>
 
@@ -644,5 +942,198 @@ function viewSubmission(submission: TaskSubmission) {
   text-align: center;
   color: #94a3b8;
   padding: 20px;
+}
+
+.detail-header {
+  margin-bottom: 8px;
+}
+
+.status-stats {
+  margin-bottom: 16px;
+}
+
+.status-card {
+  text-align: center;
+  padding: 8px 0;
+
+  &.not-started {
+    background: #f8fafc !important;
+    .status-num { color: #64748b; }
+  }
+  &.in-progress {
+    background: #fffbeb !important;
+    .status-num { color: #f59e0b; }
+  }
+  &.submitted {
+    background: #eff6ff !important;
+    .status-num { color: #3b82f6; }
+  }
+  &.overdue {
+    background: #fef2f2 !important;
+    .status-num { color: #ef4444; }
+  }
+  &.graded {
+    background: #f0fdf4 !important;
+    .status-num { color: #22c55e; }
+  }
+}
+
+.status-num {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.status-label {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.submission-detail {
+  padding: 8px 0;
+}
+
+.text-muted {
+  color: #94a3b8;
+}
+
+.wrong-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.wrong-question-item {
+  padding: 12px;
+  background: #fef2f2;
+  border-radius: 8px;
+  border-left: 3px solid #ef4444;
+}
+
+.wq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+
+  .wq-num {
+    font-weight: 600;
+    color: #991b1b;
+  }
+
+  .wq-op {
+    font-size: 12px;
+    padding: 2px 8px;
+    background: #fee2e2;
+    border-radius: 4px;
+    color: #dc2626;
+  }
+}
+
+.wq-content {
+  .wq-question {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 8px;
+  }
+
+  .wq-answers {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    margin-bottom: 8px;
+
+    .wq-correct {
+      color: #16a34a;
+    }
+
+    .wq-user {
+      color: #dc2626;
+    }
+  }
+
+  .wq-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #92400e;
+    margin-bottom: 8px;
+  }
+
+  .wq-rods {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .wq-rods-label {
+      font-size: 12px;
+      color: #64748b;
+    }
+  }
+}
+
+.no-wrong-questions {
+  text-align: center;
+  padding: 30px;
+  color: #10b981;
+  font-size: 16px;
+  background: #f0fdf4;
+  border-radius: 8px;
+}
+
+.grading-section {
+  margin-top: 8px;
+}
+
+.grading-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.history-grade {
+  margin-top: 8px;
+}
+
+.grade-record {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.grade-record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.grade-time {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.grade-comment {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.reassign-student {
+  margin-left: 8px;
 }
 </style>

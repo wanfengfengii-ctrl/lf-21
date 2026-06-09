@@ -51,6 +51,10 @@ export interface UserOperationError {
 
 export interface PracticeRecord {
   questionId: number
+  num1: number
+  num2: number
+  operator: OperatorType
+  answer: number
   startTime: number
   endTime: number
   userAnswer: number | null

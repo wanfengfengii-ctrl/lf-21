@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { NTabs, NTabPane, NButton, NMessageProvider } from 'naive-ui'
+import { NTabs, NTabPane, NButton, NMessageProvider, useMessage } from 'naive-ui'
 import Abacus from './components/Abacus.vue'
 import DemoPanel from './components/DemoPanel.vue'
 import PracticePanel from './components/PracticePanel.vue'
@@ -98,6 +98,7 @@ const practiceStore = usePracticeStore()
 const teacherStore = useTeacherStore()
 
 const activeTab = ref('demo')
+const message = useMessage()
 
 function handleBeadClick(rodIndex: number, type: 'upper' | 'lower', beadIndex: number) {
   abacusStore.clickBead(rodIndex, type, beadIndex)
@@ -175,6 +176,38 @@ watch(
         practiceStore.generateNewQuestion()
         activeTab.value = 'practice'
       }
+    }
+  }
+)
+
+watch(
+  () => practiceStore.showSummary,
+  (showSummary) => {
+    if (showSummary && teacherStore.activeTask && teacherStore.currentStudent) {
+      const summary = practiceStore.summary
+      const wrongQuestions = practiceStore.wrongQuestions
+      const task = teacherStore.activeTask
+      const student = teacherStore.currentStudent
+
+      const score = summary.totalQuestions > 0 
+        ? Math.round((summary.correctCount / summary.totalQuestions) * 100)
+        : 0
+
+      const submissionData = {
+        score,
+        totalQuestions: summary.totalQuestions,
+        correctCount: summary.correctCount,
+        totalTime: summary.totalTime,
+        wrongQuestions: wrongQuestions as any[]
+      }
+
+      teacherStore.submitTaskSubmission(task.id, student.id, submissionData)
+      message?.success?.(`任务"${task.title}"已提交！`)
+
+      setTimeout(() => {
+        activeTab.value = 'teacher'
+        teacherStore.setActiveTask(null)
+      }, 1500)
     }
   }
 )

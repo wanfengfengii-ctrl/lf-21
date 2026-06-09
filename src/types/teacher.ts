@@ -1,4 +1,8 @@
-import type { DifficultyLevel, OperatorType, WrongQuestion } from './abacus'
+import type { DifficultyLevel, OperatorType, WrongQuestion, ReplayData } from './abacus'
+
+export type TaskStatus = 'not_started' | 'in_progress' | 'submitted' | 'overdue' | 'graded'
+
+export type SubmissionStatus = 'draft' | 'submitted' | 'graded'
 
 export interface Student {
   id: string
@@ -49,19 +53,39 @@ export interface Task {
   teacherId: string
   assignedGroupIds: string[]
   assignedStudentIds: string[]
+  isClosed?: boolean
+  closedAt?: number
+  reminderCount?: number
+  lastRemindedAt?: number
+  reassignCount?: number
+}
+
+export interface QuestionReplay {
+  questionIndex: number
+  replayData: ReplayData
 }
 
 export interface TaskSubmission {
+  id: string
   taskId: string
   studentId: string
   submittedAt: number
+  startedAt?: number
   score: number
   correctCount: number
   totalQuestions: number
   totalTime: number
   averageTime: number
   isCompleted: boolean
+  status: SubmissionStatus
   wrongQuestions: WrongQuestion[]
+  questionReplays?: QuestionReplay[]
+  gradedAt?: number
+  gradedBy?: string
+  teacherComment?: string
+  teacherScore?: number
+  reassignCount?: number
+  lastReassignAt?: number
 }
 
 export interface StudentProgress {

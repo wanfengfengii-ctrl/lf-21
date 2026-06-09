@@ -108,7 +108,7 @@
             <n-button type="primary" @click="nextQuestion" v-if="questionIndex < totalQuestions">
               下一题
             </n-button>
-            <n-button type="success" @click="showSummary = true" v-else>
+            <n-button type="success" @click="store.finishPractice()" v-else>
               查看总结
             </n-button>
           </div>
@@ -217,7 +217,6 @@ const store = usePracticeStore()
 const difficulty = ref<DifficultyLevel>('easy')
 const allowedOperations = ref<OperatorType[]>(['+', '-'])
 const totalQuestions = ref(10)
-const showSummary = ref(false)
 const elapsedTime = ref(0)
 const lastAnswerTime = ref(0)
 const lastUserAnswer = ref<number | null>(null)
@@ -232,6 +231,10 @@ const stats = computed(() => store.stats)
 const accuracy = computed(() => store.accuracy)
 const averageTime = computed(() => store.averageTime)
 const operationErrors = computed(() => store.operationErrors)
+const showSummary = computed({
+  get: () => store.showSummary,
+  set: (val: boolean) => { store.showSummary = val }
+})
 
 const userAnswerNum = computed({
   get: () => store.userAnswer ? parseFloat(store.userAnswer) : null as unknown as number,

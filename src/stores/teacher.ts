@@ -12,7 +12,9 @@ import type {
   LearningAdvice,
   TeacherComment,
   ExportOptions,
-  Teacher
+  Teacher,
+  TaskStatus,
+  QuestionReplay
 } from '../types/teacher'
 import type { DifficultyLevel, OperatorType, WrongQuestion } from '../types/abacus'
 import { levelConfigs } from '../data/levels'
@@ -197,15 +199,18 @@ function getMockTasks(): Task[] {
 function getMockSubmissions(): TaskSubmission[] {
   return [
     {
+      id: 'sub1',
       taskId: 'task1',
       studentId: 'stu1',
       submittedAt: Date.now() - 86400000,
+      startedAt: Date.now() - 86400000 - 300000,
       score: 80,
       correctCount: 8,
       totalQuestions: 10,
       totalTime: 300000,
       averageTime: 30000,
       isCompleted: true,
+      status: 'graded',
       wrongQuestions: [
         {
           num1: 45,
@@ -229,18 +234,25 @@ function getMockSubmissions(): TaskSubmission[] {
           errorRods: [5],
           errorDescription: '个位进位忘记加了'
         }
-      ]
+      ],
+      gradedAt: Date.now() - 86400000 + 600000,
+      gradedBy: 't1',
+      teacherComment: '进步很大！注意进位练习',
+      teacherScore: 85
     },
     {
+      id: 'sub2',
       taskId: 'task1',
       studentId: 'stu2',
       submittedAt: Date.now() - 172800000,
+      startedAt: Date.now() - 172800000 - 240000,
       score: 90,
       correctCount: 9,
       totalQuestions: 10,
       totalTime: 240000,
       averageTime: 24000,
       isCompleted: true,
+      status: 'submitted',
       wrongQuestions: [
         {
           num1: 73,
@@ -256,39 +268,56 @@ function getMockSubmissions(): TaskSubmission[] {
       ]
     },
     {
+      id: 'sub3',
       taskId: 'task2',
       studentId: 'stu1',
       submittedAt: Date.now() - 259200000,
+      startedAt: Date.now() - 259200000 - 180000,
       score: 100,
       correctCount: 5,
       totalQuestions: 5,
       totalTime: 180000,
       averageTime: 36000,
       isCompleted: true,
-      wrongQuestions: []
+      status: 'graded',
+      wrongQuestions: [],
+      gradedAt: Date.now() - 259200000 + 300000,
+      gradedBy: 't1',
+      teacherComment: '全对很棒！继续保持',
+      teacherScore: 100
     },
     {
+      id: 'sub4',
       taskId: 'task2',
       studentId: 'stu4',
       submittedAt: Date.now() - 432000000,
+      startedAt: Date.now() - 432000000 - 120000,
       score: 100,
       correctCount: 5,
       totalQuestions: 5,
       totalTime: 120000,
       averageTime: 24000,
       isCompleted: true,
-      wrongQuestions: []
+      status: 'graded',
+      wrongQuestions: [],
+      gradedAt: Date.now() - 432000000 + 200000,
+      gradedBy: 't1',
+      teacherComment: '非常好，速度也很快！',
+      teacherScore: 100
     },
     {
+      id: 'sub5',
       taskId: 'task3',
       studentId: 'stu3',
       submittedAt: Date.now() - 43200000,
+      startedAt: Date.now() - 43200000 - 600000,
       score: 60,
       correctCount: 9,
       totalQuestions: 15,
       totalTime: 600000,
       averageTime: 40000,
       isCompleted: true,
+      status: 'submitted',
       wrongQuestions: [
         {
           num1: 7,
@@ -1149,7 +1178,11 @@ export const useTeacherStore = defineStore('teacher', () => {
     activeTask.value = null
   }
 
-  function setActiveTask(taskId: string): void {
+  function setActiveTask(taskId: string | null): void {
+    if (taskId === null) {
+      activeTask.value = null
+      return
+    }
     const task = tasks.value.find(t => t.id === taskId)
     if (task) {
       activeTask.value = task
@@ -1158,6 +1191,299 @@ export const useTeacherStore = defineStore('teacher', () => {
 
   function clearActiveTask(): void {
     activeTask.value = null
+  }
+
+  function getSubmissionById(id: string): TaskSubmission | undefined {
+    return submissions.value.find(s => s.id === id)
+  }
+
+  function getStudentTaskStatus(taskId: string, studentId: string): TaskStatus {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task) return 'not_started'
+
+    const submission = submissions.value.find(
+      s => s.taskId === taskId && s.studentId === studentId
+    )
+
+    if (!submission) {
+      if (task.deadline && Date.now() > task.deadline) {
+        return 'overdue'
+      }
+      return 'not_started'
+    }
+
+    if (submission.status === 'graded') {
+      return 'graded'
+    }
+
+    if (submission.status === 'submitted') {
+      return 'submitted'
+    }
+
+    if (submission.status === 'draft') {
+      if (task.deadline && Date.now() > task.deadline) {
+        return 'overdue'
+      }
+      return 'in_progress'
+    }
+
+    if (task.deadline && Date.now() > task.deadline) {
+      return 'overdue'
+    }
+
+    return 'not_started'
+  }
+
+  function startTaskSubmission(taskId: string, studentId: string): TaskSubmission | null {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task) return null
+
+    let submission = submissions.value.find(
+      s => s.taskId === taskId && s.studentId === studentId && s.status === 'draft'
+    )
+
+    if (submission) {
+      return submission
+    }
+
+    const newSubmission: TaskSubmission = {
+      id: generateId(),
+      taskId,
+      studentId,
+      submittedAt: 0,
+      startedAt: Date.now(),
+      score: 0,
+      correctCount: 0,
+      totalQuestions: task.config.questionCount,
+      totalTime: 0,
+      averageTime: 0,
+      isCompleted: false,
+      status: 'draft',
+      wrongQuestions: [],
+      questionReplays: [],
+      reassignCount: 0
+    }
+
+    submissions.value.push(newSubmission)
+    return newSubmission
+  }
+
+  function submitTaskSubmission(
+    taskId: string,
+    studentId: string,
+    data: {
+      score: number
+      correctCount: number
+      totalQuestions: number
+      totalTime: number
+      wrongQuestions: WrongQuestion[]
+      questionReplays?: QuestionReplay[]
+    }
+  ): TaskSubmission | null {
+    let submission = submissions.value.find(
+      s => s.taskId === taskId && s.studentId === studentId && s.status === 'draft'
+    )
+
+    if (!submission) {
+      submission = {
+        id: generateId(),
+        taskId,
+        studentId,
+        submittedAt: Date.now(),
+        startedAt: Date.now(),
+        score: data.score,
+        correctCount: data.correctCount,
+        totalQuestions: data.totalQuestions,
+        totalTime: data.totalTime,
+        averageTime: data.totalQuestions > 0 ? data.totalTime / data.totalQuestions : 0,
+        isCompleted: true,
+        status: 'submitted',
+        wrongQuestions: data.wrongQuestions,
+        questionReplays: data.questionReplays || [],
+        reassignCount: 0
+      }
+      submissions.value.push(submission)
+    } else {
+      submission.submittedAt = Date.now()
+      submission.score = data.score
+      submission.correctCount = data.correctCount
+      submission.totalQuestions = data.totalQuestions
+      submission.totalTime = data.totalTime
+      submission.averageTime = data.totalQuestions > 0 ? data.totalTime / data.totalQuestions : 0
+      submission.isCompleted = true
+      submission.status = 'submitted'
+      submission.wrongQuestions = data.wrongQuestions
+      submission.questionReplays = data.questionReplays || []
+    }
+
+    const student = students.value.find(s => s.id === studentId)
+    if (student) {
+      student.totalPracticeTime += data.totalTime
+      student.totalQuestions += data.totalQuestions
+      student.correctQuestions += data.correctCount
+
+      if (data.correctCount === data.totalQuestions) {
+        student.currentStreak++
+        student.bestStreak = Math.max(student.bestStreak, student.currentStreak)
+      } else {
+        student.currentStreak = 0
+      }
+
+      const starsEarned = Math.floor(data.score / 33)
+      student.stars += starsEarned
+    }
+
+    return submission
+  }
+
+  function gradeSubmission(
+    submissionId: string,
+    data: {
+      teacherScore?: number
+      teacherComment?: string
+    }
+  ): boolean {
+    const submission = submissions.value.find(s => s.id === submissionId)
+    if (!submission) return false
+
+    submission.status = 'graded'
+    submission.gradedAt = Date.now()
+    submission.gradedBy = currentTeacher.value?.id || ''
+
+    if (data.teacherScore !== undefined) {
+      submission.teacherScore = data.teacherScore
+    }
+    if (data.teacherComment !== undefined) {
+      submission.teacherComment = data.teacherComment
+    }
+
+    return true
+  }
+
+  function reassignTask(taskId: string, studentId: string): boolean {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task) return false
+
+    const submissionIndex = submissions.value.findIndex(
+      s => s.taskId === taskId && s.studentId === studentId
+    )
+
+    if (submissionIndex >= 0) {
+      const oldSubmission = submissions.value[submissionIndex]
+      oldSubmission.reassignCount = (oldSubmission.reassignCount || 0) + 1
+      oldSubmission.lastReassignAt = Date.now()
+    }
+
+    const taskIndex = tasks.value.findIndex(t => t.id === taskId)
+    if (taskIndex >= 0) {
+      tasks.value[taskIndex].reassignCount = (tasks.value[taskIndex].reassignCount || 0) + 1
+    }
+
+    return true
+  }
+
+  function sendTaskReminder(taskId: string): boolean {
+    const taskIndex = tasks.value.findIndex(t => t.id === taskId)
+    if (taskIndex < 0) return false
+
+    tasks.value[taskIndex].reminderCount = (tasks.value[taskIndex].reminderCount || 0) + 1
+    tasks.value[taskIndex].lastRemindedAt = Date.now()
+
+    return true
+  }
+
+  function isTaskOverdue(taskId: string, studentId: string): boolean {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (!task || !task.deadline) return false
+
+    const submission = submissions.value.find(
+      s => s.taskId === taskId && s.studentId === studentId
+    )
+
+    if (submission && submission.status !== 'draft') {
+      return false
+    }
+
+    return Date.now() > task.deadline
+  }
+
+  function getOverdueTasks(): Task[] {
+    const now = Date.now()
+    return tasks.value.filter(task => {
+      if (!task.deadline || task.isClosed) return false
+      return now > task.deadline
+    })
+  }
+
+  function getOverdueTasksForStudent(studentId: string): Task[] {
+    const now = Date.now()
+    const studentTasks = tasksByStudent.value[studentId] || []
+
+    return studentTasks.filter(task => {
+      if (!task.deadline || task.isClosed) return false
+
+      const submission = submissions.value.find(
+        s => s.taskId === task.id && s.studentId === studentId
+      )
+
+      if (submission && submission.status !== 'draft') {
+        return false
+      }
+
+      return now > task.deadline
+    })
+  }
+
+  function getPendingSubmissions(): TaskSubmission[] {
+    return submissions.value.filter(s => s.status === 'submitted')
+  }
+
+  function getTaskSubmissionDetail(taskId: string, studentId: string): TaskSubmission | undefined {
+    return submissions.value.find(
+      s => s.taskId === taskId && s.studentId === studentId
+    )
+  }
+
+  function closeTask(taskId: string): boolean {
+    const taskIndex = tasks.value.findIndex(t => t.id === taskId)
+    if (taskIndex < 0) return false
+
+    tasks.value[taskIndex].isClosed = true
+    tasks.value[taskIndex].closedAt = Date.now()
+    return true
+  }
+
+  function reopenTask(taskId: string): boolean {
+    const taskIndex = tasks.value.findIndex(t => t.id === taskId)
+    if (taskIndex < 0) return false
+
+    tasks.value[taskIndex].isClosed = false
+    tasks.value[taskIndex].closedAt = undefined
+    return true
+  }
+
+  function getTaskStatusCounts(taskId: string): {
+    not_started: number
+    in_progress: number
+    submitted: number
+    graded: number
+    overdue: number
+  } {
+    const taskStudents = getStudentsForTask(taskId)
+    const counts = {
+      not_started: 0,
+      in_progress: 0,
+      submitted: 0,
+      graded: 0,
+      overdue: 0
+    }
+
+    for (const student of taskStudents) {
+      const status = getStudentTaskStatus(taskId, student.id)
+      counts[status]++
+    }
+
+    return counts
   }
 
   return {
@@ -1211,6 +1537,21 @@ export const useTeacherStore = defineStore('teacher', () => {
     logoutStudent,
     activeTask,
     setActiveTask,
-    clearActiveTask
+    clearActiveTask,
+    getSubmissionById,
+    getStudentTaskStatus,
+    startTaskSubmission,
+    submitTaskSubmission,
+    gradeSubmission,
+    reassignTask,
+    sendTaskReminder,
+    isTaskOverdue,
+    getOverdueTasks,
+    getOverdueTasksForStudent,
+    getPendingSubmissions,
+    getTaskSubmissionDetail,
+    closeTask,
+    reopenTask,
+    getTaskStatusCounts
   }
 })

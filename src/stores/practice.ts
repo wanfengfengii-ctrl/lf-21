@@ -123,6 +123,44 @@ export const usePracticeStore = defineStore('practice', () => {
   const operationErrors = ref<UserOperationError[]>([])
   const isSignError = ref(false)
   const signErrorExpected = ref(false)
+  const showSummary = ref(false)
+
+  const wrongQuestions = computed(() => {
+    return records.value
+      .filter(r => !r.isCorrect)
+      .map(r => {
+        const errorRods = r.errorSteps
+          .filter(s => s.rodIndex !== undefined)
+          .map(s => s.rodIndex as number)
+        const operationErrorRods = r.operationErrors
+          .filter(e => e.rodIndex >= 0)
+          .map(e => e.rodIndex)
+        return {
+          questionId: r.questionId,
+          num1: r.num1,
+          num2: r.num2,
+          operator: r.operator,
+          answer: r.answer,
+          userAnswer: r.userAnswer,
+          errorRods: [...new Set([...errorRods, ...operationErrorRods])],
+          errorDescription: r.errorSteps.length > 0 ? `有 ${r.errorSteps.length} 步操作错误` : '答案错误',
+          timeSpent: r.endTime - r.startTime
+        }
+      })
+  })
+
+  const summary = computed(() => {
+    const total = stats.value.totalQuestions
+    const correct = stats.value.correctCount
+    return {
+      totalQuestions: total,
+      correctCount: correct,
+      wrongCount: total - correct,
+      totalTime: stats.value.totalTime,
+      averageTime: Math.round(averageTime.value * 10) / 10,
+      accuracy: accuracy.value
+    }
+  })
 
   const stats = computed<PracticeStats>(() => {
     const correctRecords = records.value.filter(r => r.isCorrect)
@@ -217,6 +255,10 @@ export const usePracticeStore = defineStore('practice', () => {
 
     const record: PracticeRecord = {
       questionId: currentQuestion.value.id,
+      num1: currentQuestion.value.num1,
+      num2: currentQuestion.value.num2,
+      operator: currentQuestion.value.operator,
+      answer: currentQuestion.value.answer,
       startTime: startTime.value,
       endTime,
       userAnswer: answer,
@@ -258,6 +300,10 @@ export const usePracticeStore = defineStore('practice', () => {
 
       const record: PracticeRecord = {
         questionId: currentQuestion.value.id,
+        num1: currentQuestion.value.num1,
+        num2: currentQuestion.value.num2,
+        operator: currentQuestion.value.operator,
+        answer: currentQuestion.value.answer,
         startTime: startTime.value,
         endTime,
         userAnswer: currentQuestion.value.answer,
@@ -298,6 +344,12 @@ export const usePracticeStore = defineStore('practice', () => {
     operationErrors.value = []
     isSignError.value = false
     signErrorExpected.value = false
+    showSummary.value = false
+  }
+
+  function finishPractice() {
+    showSummary.value = true
+    isAnswering.value = false
   }
 
   function getCorrectSteps(): StepInfo[] {
@@ -329,6 +381,9 @@ export const usePracticeStore = defineStore('practice', () => {
     stats,
     accuracy,
     averageTime,
+    showSummary,
+    wrongQuestions,
+    summary,
     setDifficulty,
     setAllowedOperations,
     setTotalQuestions,
@@ -338,6 +393,7 @@ export const usePracticeStore = defineStore('practice', () => {
     clearOperationErrors,
     addUserStep,
     resetPractice,
+    finishPractice,
     getCorrectSteps
   }
 })

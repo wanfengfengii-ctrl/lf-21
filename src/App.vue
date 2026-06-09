@@ -59,6 +59,12 @@
           </div>
         </div>
       </n-tab-pane>
+
+      <n-tab-pane name="level" tab="闯关模式">
+        <div class="tab-content level-tab">
+          <LevelMode />
+        </div>
+      </n-tab-pane>
     </n-tabs>
 
     <footer class="app-footer">
@@ -73,6 +79,7 @@ import { NTabs, NTabPane, NButton } from 'naive-ui'
 import Abacus from './components/Abacus.vue'
 import DemoPanel from './components/DemoPanel.vue'
 import PracticePanel from './components/PracticePanel.vue'
+import LevelMode from './components/LevelMode.vue'
 import { useAbacusStore } from './stores/abacus'
 import { usePracticeStore } from './stores/practice'
 
@@ -129,6 +136,10 @@ watch(activeTab, (newTab) => {
   if (newTab === 'practice') {
     abacusStore.resetAbacus()
     practiceStore.clearOperationErrors()
+  } else if (newTab === 'level') {
+    abacusStore.resetAbacus()
+  } else if (newTab === 'demo') {
+    abacusStore.resetAbacus()
   }
 })
 </script>
@@ -199,6 +210,10 @@ watch(activeTab, (newTab) => {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+.level-tab {
+  width: 100%;
 }
 
 .app-footer {

@@ -386,6 +386,7 @@ export const useLevelStore = defineStore('level', () => {
       operator: currentQuestion.value.operator,
       answer: currentQuestion.value.answer,
       userAnswer: getAbacusValue(abacusState),
+      difficulty: currentQuestion.value.difficulty,
       errorRods: errors.filter(e => e.rodIndex >= 0).map(e => e.rodIndex),
       errorDescription: errors.map(e => e.description).join('; '),
       timestamp: Date.now()

@@ -107,12 +107,13 @@ export interface LevelRecord {
 }
 
 export interface WrongQuestion {
-  questionId: number
+  questionId?: number
   num1: number
   num2: number
   operator: OperatorType
   answer: number
   userAnswer: number
+  difficulty: DifficultyLevel
   errorRods: number[]
   errorDescription: string
   timestamp: number

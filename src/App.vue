@@ -1,9 +1,10 @@
 <template>
-  <div class="app">
-    <header class="app-header">
-      <h1 class="app-title">交互算盘</h1>
-      <p class="app-subtitle">四则运算拨珠演示与练习</p>
-    </header>
+  <n-message-provider>
+    <div class="app">
+      <header class="app-header">
+        <h1 class="app-title">交互算盘</h1>
+        <p class="app-subtitle">四则运算拨珠演示与练习</p>
+      </header>
 
     <n-tabs v-model:value="activeTab" type="line" class="main-tabs">
       <n-tab-pane name="demo" tab="演示模式">
@@ -65,21 +66,29 @@
           <LevelMode />
         </div>
       </n-tab-pane>
+
+      <n-tab-pane name="teacher" tab="教师/家长中心">
+        <div class="tab-content teacher-tab">
+          <TeacherCenter />
+        </div>
+      </n-tab-pane>
     </n-tabs>
 
     <footer class="app-footer">
       <p>上珠一颗代表 5，下珠一颗代表 1 | 点击或拖拽算珠进行操作</p>
     </footer>
-  </div>
+    </div>
+  </n-message-provider>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { NTabs, NTabPane, NButton } from 'naive-ui'
+import { NTabs, NTabPane, NButton, NMessageProvider } from 'naive-ui'
 import Abacus from './components/Abacus.vue'
 import DemoPanel from './components/DemoPanel.vue'
 import PracticePanel from './components/PracticePanel.vue'
 import LevelMode from './components/LevelMode.vue'
+import TeacherCenter from './components/TeacherCenter.vue'
 import { useAbacusStore } from './stores/abacus'
 import { usePracticeStore } from './stores/practice'
 

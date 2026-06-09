@@ -133,7 +133,7 @@ import {
   NEmpty
 } from 'naive-ui'
 
-import type { OperatorType, StepInfo } from '../types/abacus'
+import type { OperatorType } from '../types/abacus'
 import { useAbacusStore } from '../stores/abacus'
 import { TOTAL_RODS } from '../utils/abacus'
 

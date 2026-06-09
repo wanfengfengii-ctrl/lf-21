@@ -1,4 +1,4 @@
-import type { BeadState, AbacusState } from '../types/abacus'
+import type { BeadState, AbacusState, UserOperationError } from '../types/abacus'
 
 export const TOTAL_RODS = 13
 
@@ -12,7 +12,8 @@ export function createEmptyAbacus(): BeadState[] {
 export function createInitialAbacusState(): AbacusState {
   return {
     rods: createEmptyAbacus(),
-    decimalPosition: 6
+    decimalPosition: 6,
+    isNegative: false
   }
 }
 
@@ -22,7 +23,7 @@ export function getRodValue(rod: BeadState): number {
 
 export function getAbacusValue(state: AbacusState): number {
   let value = 0
-  const { rods, decimalPosition } = state
+  const { rods, decimalPosition, isNegative } = state
   
   for (let i = 0; i < rods.length; i++) {
     const rodValue = getRodValue(rods[i])
@@ -30,7 +31,8 @@ export function getAbacusValue(state: AbacusState): number {
     value += rodValue * Math.pow(10, power)
   }
   
-  return Math.round(value * 10000) / 10000
+  value = Math.round(value * 10000) / 10000
+  return isNegative ? -value : value
 }
 
 export function isValidRodState(rod: BeadState): boolean {
@@ -90,7 +92,8 @@ export function addToRod(
 export function cloneAbacusState(state: AbacusState): AbacusState {
   return {
     rods: state.rods.map(r => ({ ...r })),
-    decimalPosition: state.decimalPosition
+    decimalPosition: state.decimalPosition,
+    isNegative: state.isNegative
   }
 }
 
@@ -111,6 +114,59 @@ export function numberToRods(value: number, decimalPosition: number = 6): BeadSt
   }
   
   return rods
+}
+
+export function numberToAbacusState(value: number, decimalPosition: number = 6): AbacusState {
+  return {
+    rods: numberToRods(value, decimalPosition),
+    decimalPosition,
+    isNegative: value < 0 && Math.abs(value) > 1e-6
+  }
+}
+
+export function compareAbacusStates(
+  actual: AbacusState,
+  expected: AbacusState
+): UserOperationError[] {
+  const errors: UserOperationError[] = []
+
+  if (actual.isNegative !== expected.isNegative) {
+    errors.push({
+      rodIndex: -1,
+      rodLabel: '符号位',
+      expectedValue: expected.isNegative ? 1 : 0,
+      actualValue: actual.isNegative ? 1 : 0,
+      type: 'both',
+      description: `符号错误：应为${expected.isNegative ? '负数' : '正数'}，实际为${actual.isNegative ? '负数' : '正数'}`
+    })
+  }
+
+  for (let i = 0; i < TOTAL_RODS; i++) {
+    const actualRod = actual.rods[i]
+    const expectedRod = expected.rods[i]
+    const actualValue = getRodValue(actualRod)
+    const expectedValue = getRodValue(expectedRod)
+    
+    if (actualValue !== expectedValue) {
+      let type: 'upper' | 'lower' | 'both' = 'both'
+      if (actualRod.upper === expectedRod.upper) {
+        type = 'lower'
+      } else if (actualRod.lower === expectedRod.lower) {
+        type = 'upper'
+      }
+      
+      errors.push({
+        rodIndex: i,
+        rodLabel: `第 ${TOTAL_RODS - i} 档`,
+        expectedValue,
+        actualValue,
+        type,
+        description: `${TOTAL_RODS - i} 档拨珠错误：应为 ${expectedValue}（上珠${expectedRod.upper}颗，下珠${expectedRod.lower}颗），实际为 ${actualValue}（上珠${actualRod.upper}颗，下珠${actualRod.lower}颗）`
+      })
+    }
+  }
+
+  return errors
 }
 
 export function formatNumber(value: number): string {

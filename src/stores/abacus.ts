@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { BeadState, StepInfo, OperatorType } from '../types/abacus'
+import type { StepInfo, OperatorType, AbacusState } from '../types/abacus'
 import {
   createInitialAbacusState,
   getAbacusValue,
@@ -8,7 +8,8 @@ import {
   numberToRods,
   isValidRodState,
   TOTAL_RODS,
-  formatNumber
+  formatNumber,
+  numberToAbacusState
 } from '../utils/abacus'
 import { generateCalculationSteps, calculateResult } from '../utils/calculation'
 
@@ -18,15 +19,17 @@ export const useAbacusStore = defineStore('abacus', () => {
   const currentStepIndex = ref(-1)
   const isPlaying = ref(false)
   const playSpeed = ref(1000)
-  const historyStack = ref<BeadState[][]>([])
+  const historyStack = ref<AbacusState[]>([])
   const num1 = ref(0)
   const num2 = ref(0)
   const operator = ref<OperatorType>('+')
   const hasError = ref(false)
   const errorMessage = ref('')
   const highlightedRod = ref<number | null>(null)
+  const errorRods = ref<number[]>([])
 
   const currentValue = computed(() => formatNumber(getAbacusValue(abacusState.value)))
+  const isNegative = computed(() => abacusState.value.isNegative)
   const canUndo = computed(() => historyStack.value.length > 0)
   const canStepForward = computed(() => currentStepIndex.value < steps.value.length - 1)
   const canStepBackward = computed(() => currentStepIndex.value >= 0)
@@ -39,6 +42,10 @@ export const useAbacusStore = defineStore('abacus', () => {
     return null
   })
 
+  function saveHistory() {
+    historyStack.value.push(cloneAbacusState(abacusState.value))
+  }
+
   function resetAbacus() {
     abacusState.value = createInitialAbacusState()
     steps.value = []
@@ -48,12 +55,27 @@ export const useAbacusStore = defineStore('abacus', () => {
     hasError.value = false
     errorMessage.value = ''
     highlightedRod.value = null
+    errorRods.value = []
   }
 
   function setNumber(value: number) {
-    const rods = numberToRods(value, abacusState.value.decimalPosition)
-    abacusState.value.rods = rods
+    abacusState.value = numberToAbacusState(value, abacusState.value.decimalPosition)
     historyStack.value = []
+    errorRods.value = []
+  }
+
+  function toggleNegative() {
+    saveHistory()
+    abacusState.value.isNegative = !abacusState.value.isNegative
+    errorRods.value = []
+  }
+
+  function setNegative(value: boolean) {
+    if (abacusState.value.isNegative !== value) {
+      saveHistory()
+      abacusState.value.isNegative = value
+    }
+    errorRods.value = []
   }
 
   function clickBead(rodIndex: number, type: 'upper' | 'lower', beadIndex: number) {
@@ -61,7 +83,6 @@ export const useAbacusStore = defineStore('abacus', () => {
 
     const rod = abacusState.value.rods[rodIndex]
     const newRod = { ...rod }
-    const historyState = abacusState.value.rods.map(r => ({ ...r }))
 
     if (type === 'upper') {
       if (beadIndex === 0) {
@@ -81,8 +102,9 @@ export const useAbacusStore = defineStore('abacus', () => {
     }
 
     if (rod.upper !== newRod.upper || rod.lower !== newRod.lower) {
-      historyStack.value.push(historyState)
+      saveHistory()
       abacusState.value.rods[rodIndex] = newRod
+      errorRods.value = errorRods.value.filter(r => r !== rodIndex)
     }
   }
 
@@ -91,7 +113,6 @@ export const useAbacusStore = defineStore('abacus', () => {
 
     const rod = abacusState.value.rods[rodIndex]
     const newRod = { ...rod }
-    const historyState = abacusState.value.rods.map(r => ({ ...r }))
 
     if (type === 'upper') {
       newRod.upper = Math.max(0, Math.min(1, value))
@@ -104,8 +125,9 @@ export const useAbacusStore = defineStore('abacus', () => {
     }
 
     if (rod.upper !== newRod.upper || rod.lower !== newRod.lower) {
-      historyStack.value.push(historyState)
+      saveHistory()
       abacusState.value.rods[rodIndex] = newRod
+      errorRods.value = errorRods.value.filter(r => r !== rodIndex)
     }
   }
 
@@ -113,7 +135,7 @@ export const useAbacusStore = defineStore('abacus', () => {
     if (historyStack.value.length === 0) return
     const previousState = historyStack.value.pop()
     if (previousState) {
-      abacusState.value.rods = previousState
+      abacusState.value = previousState
     }
   }
 
@@ -123,6 +145,7 @@ export const useAbacusStore = defineStore('abacus', () => {
     operator.value = op
     hasError.value = false
     errorMessage.value = ''
+    errorRods.value = []
 
     const result = generateCalculationSteps(n1, n2, op)
     
@@ -134,10 +157,7 @@ export const useAbacusStore = defineStore('abacus', () => {
     }
 
     const initialValue = op === '×' ? 0 : n1
-    abacusState.value = {
-      rods: numberToRods(initialValue, result.decimalPosition),
-      decimalPosition: result.decimalPosition
-    }
+    abacusState.value = numberToAbacusState(initialValue, result.decimalPosition)
 
     if (op === '×') {
       const setupSteps: StepInfo[] = []
@@ -229,8 +249,7 @@ export const useAbacusStore = defineStore('abacus', () => {
       return
     }
 
-    const historyState = abacusState.value.rods.map(r => ({ ...r }))
-    historyStack.value.push(historyState)
+    saveHistory()
 
     const rod = abacusState.value.rods[nextStep.rodIndex]
     const newRod = { ...rod }
@@ -262,7 +281,7 @@ export const useAbacusStore = defineStore('abacus', () => {
     if (historyStack.value.length > 0) {
       const previousState = historyStack.value.pop()
       if (previousState) {
-        abacusState.value.rods = previousState
+        abacusState.value = previousState
       }
     }
 
@@ -325,6 +344,14 @@ export const useAbacusStore = defineStore('abacus', () => {
     return calculateResult(num1.value, num2.value, operator.value)
   }
 
+  function setErrorRods(rods: number[]) {
+    errorRods.value = rods
+  }
+
+  function clearErrorRods() {
+    errorRods.value = []
+  }
+
   return {
     abacusState,
     steps,
@@ -337,7 +364,9 @@ export const useAbacusStore = defineStore('abacus', () => {
     hasError,
     errorMessage,
     highlightedRod,
+    errorRods,
     currentValue,
+    isNegative,
     canUndo,
     canStepForward,
     canStepBackward,
@@ -346,6 +375,8 @@ export const useAbacusStore = defineStore('abacus', () => {
     currentStep,
     resetAbacus,
     setNumber,
+    toggleNegative,
+    setNegative,
     clickBead,
     dragBead,
     undo,
@@ -357,6 +388,8 @@ export const useAbacusStore = defineStore('abacus', () => {
     pause,
     togglePlay,
     setSpeed,
-    getExpectedResult
+    getExpectedResult,
+    setErrorRods,
+    clearErrorRods
   }
 })

@@ -87,6 +87,22 @@
             <br />
             用时: {{ formatTime(lastAnswerTime) }}
           </n-alert>
+
+          <div v-if="!lastAnswerCorrect && operationErrors.length > 0" class="error-detail-section">
+            <n-alert type="warning" :show-icon="true">
+              <template #header>拨珠错误详情</template>
+              <div class="error-detail-list">
+                <div 
+                  v-for="(error, index) in operationErrors" 
+                  :key="index" 
+                  class="error-detail-item"
+                >
+                  <n-tag type="error" size="small">{{ error.rodLabel }}</n-tag>
+                  <span class="error-detail-text">{{ error.description }}</span>
+                </div>
+              </div>
+            </n-alert>
+          </div>
           
           <div class="next-action">
             <n-button type="primary" @click="nextQuestion" v-if="questionIndex < totalQuestions">
@@ -179,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   NCard,
   NRadioGroup,
@@ -215,6 +231,7 @@ const questionIndex = computed(() => store.questionIndex)
 const stats = computed(() => store.stats)
 const accuracy = computed(() => store.accuracy)
 const averageTime = computed(() => store.averageTime)
+const operationErrors = computed(() => store.operationErrors)
 
 const userAnswerNum = computed({
   get: () => store.userAnswer ? parseFloat(store.userAnswer) : null as unknown as number,
@@ -431,6 +448,33 @@ onUnmounted(() => {
 .result-alert {
   margin-bottom: 16px;
   text-align: left;
+}
+
+.error-detail-section {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.error-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.error-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fff7e6;
+  border-radius: 4px;
+}
+
+.error-detail-text {
+  font-size: 13px;
+  color: #666;
+  flex: 1;
 }
 
 .next-action {

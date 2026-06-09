@@ -10,6 +10,7 @@ export interface BeadState {
 export interface AbacusState {
   rods: BeadState[]
   decimalPosition: number
+  isNegative: boolean
 }
 
 export interface StepInfo {
@@ -39,6 +40,15 @@ export interface PracticeQuestion {
   difficulty: DifficultyLevel
 }
 
+export interface UserOperationError {
+  rodIndex: number
+  rodLabel: string
+  expectedValue: number
+  actualValue: number
+  type: 'upper' | 'lower' | 'both'
+  description: string
+}
+
 export interface PracticeRecord {
   questionId: number
   startTime: number
@@ -46,6 +56,7 @@ export interface PracticeRecord {
   userAnswer: number | null
   isCorrect: boolean
   errorSteps: StepInfo[]
+  operationErrors: UserOperationError[]
   totalSteps: number
 }
 

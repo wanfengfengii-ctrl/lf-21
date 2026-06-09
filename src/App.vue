@@ -12,11 +12,14 @@
             <Abacus
               :rods="abacusStore.abacusState.rods"
               :decimal-position="abacusStore.abacusState.decimalPosition"
+              :is-negative="abacusStore.isNegative"
               :interactive="true"
               :highlighted-rod="abacusStore.highlightedRod"
+              :error-rods="abacusStore.errorRods"
               :error-message="abacusStore.errorMessage"
               @bead-click="handleBeadClick"
               @bead-drag="handleBeadDrag"
+              @toggle-sign="handleToggleSign"
             />
           </div>
           <div class="panel-section">
@@ -31,12 +34,20 @@
             <Abacus
               :rods="abacusStore.abacusState.rods"
               :decimal-position="abacusStore.abacusState.decimalPosition"
+              :is-negative="abacusStore.isNegative"
               :interactive="true"
               :highlighted-rod="abacusStore.highlightedRod"
-              @bead-click="handleBeadClick"
-              @bead-drag="handleBeadDrag"
+              :error-rods="practiceStore.errorRodIndices"
+              :is-sign-error="practiceStore.isSignError"
+              :sign-error-expected="practiceStore.signErrorExpected"
+              @bead-click="handlePracticeBeadClick"
+              @bead-drag="handlePracticeBeadDrag"
+              @toggle-sign="handlePracticeToggleSign"
             />
             <div class="practice-actions">
+              <n-button @click="checkPracticeAnswer" v-if="practiceStore.isAnswering">
+                检查拨珠结果
+              </n-button>
               <n-button @click="showAnswerOnAbacus" v-if="practiceStore.currentQuestion && practiceStore.showResult">
                 在算盘上显示答案
               </n-button>
@@ -78,6 +89,29 @@ function handleBeadDrag(rodIndex: number, type: 'upper' | 'lower', value: number
   abacusStore.dragBead(rodIndex, type, value)
 }
 
+function handleToggleSign() {
+  abacusStore.toggleNegative()
+}
+
+function handlePracticeBeadClick(rodIndex: number, type: 'upper' | 'lower', beadIndex: number) {
+  abacusStore.clickBead(rodIndex, type, beadIndex)
+  practiceStore.clearOperationErrors()
+}
+
+function handlePracticeBeadDrag(rodIndex: number, type: 'upper' | 'lower', value: number) {
+  abacusStore.dragBead(rodIndex, type, value)
+  practiceStore.clearOperationErrors()
+}
+
+function handlePracticeToggleSign() {
+  abacusStore.toggleNegative()
+  practiceStore.clearOperationErrors()
+}
+
+function checkPracticeAnswer() {
+  practiceStore.checkAbacusAnswer(abacusStore.abacusState)
+}
+
 function showAnswerOnAbacus() {
   if (practiceStore.currentQuestion) {
     abacusStore.setNumber(practiceStore.currentQuestion.answer)
@@ -86,11 +120,15 @@ function showAnswerOnAbacus() {
 
 function clearAbacus() {
   abacusStore.resetAbacus()
+  if (activeTab.value === 'practice') {
+    practiceStore.clearOperationErrors()
+  }
 }
 
 watch(activeTab, (newTab) => {
   if (newTab === 'practice') {
     abacusStore.resetAbacus()
+    practiceStore.clearOperationErrors()
   }
 })
 </script>

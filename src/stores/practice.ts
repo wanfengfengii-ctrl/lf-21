@@ -1,7 +1,17 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { DifficultyLevel, OperatorType, PracticeQuestion, PracticeRecord, PracticeStats, StepInfo } from '../types/abacus'
+import type { 
+  DifficultyLevel, 
+  OperatorType, 
+  PracticeQuestion, 
+  PracticeRecord, 
+  PracticeStats, 
+  StepInfo, 
+  UserOperationError,
+  AbacusState 
+} from '../types/abacus'
 import { generateCalculationSteps } from '../utils/calculation'
+import { compareAbacusStates, numberToAbacusState } from '../utils/abacus'
 
 function getRandomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -41,12 +51,12 @@ function generateQuestion(difficulty: DifficultyLevel, allowedOps: OperatorType[
         num2 = getRandomInt(10, num1)
         answer = num1 - num2
       } else if (op === '×') {
-        num1 = getRandomInt(2, 9)
+        num1 = getRandomInt(10, 99)
         num2 = getRandomInt(2, 9)
         answer = num1 * num2
       } else {
         num2 = getRandomInt(2, 9)
-        answer = getRandomInt(2, 9)
+        answer = getRandomInt(10, 99)
         num1 = num2 * answer
       }
       break
@@ -60,12 +70,24 @@ function generateQuestion(difficulty: DifficultyLevel, allowedOps: OperatorType[
         num2 = getRandomInt(100, num1)
         answer = num1 - num2
       } else if (op === '×') {
-        num1 = getRandomInt(10, 99)
-        num2 = getRandomInt(2, 9)
+        const multiDigitOp = Math.random() > 0.5
+        if (multiDigitOp) {
+          num1 = getRandomInt(10, 99)
+          num2 = getRandomInt(10, 99)
+        } else {
+          num1 = getRandomInt(100, 999)
+          num2 = getRandomInt(2, 9)
+        }
         answer = num1 * num2
       } else {
-        num2 = getRandomInt(2, 9)
-        answer = getRandomInt(10, 99)
+        const multiDigitDivisor = Math.random() > 0.5
+        if (multiDigitDivisor) {
+          num2 = getRandomInt(10, 99)
+          answer = getRandomInt(2, 9)
+        } else {
+          num2 = getRandomInt(2, 9)
+          answer = getRandomInt(100, 999)
+        }
         num1 = num2 * answer
       }
       break
@@ -98,6 +120,9 @@ export const usePracticeStore = defineStore('practice', () => {
   const userSteps = ref<StepInfo[]>([])
   const questionIndex = ref(0)
   const totalQuestions = ref(10)
+  const operationErrors = ref<UserOperationError[]>([])
+  const isSignError = ref(false)
+  const signErrorExpected = ref(false)
 
   const stats = computed<PracticeStats>(() => {
     const correctRecords = records.value.filter(r => r.isCorrect)
@@ -143,6 +168,12 @@ export const usePracticeStore = defineStore('practice', () => {
     return Math.round(stats.value.totalTime / stats.value.totalQuestions / 1000 * 10) / 10
   })
 
+  const errorRodIndices = computed(() => {
+    return operationErrors.value
+      .filter(e => e.rodIndex >= 0)
+      .map(e => e.rodIndex)
+  })
+
   function setDifficulty(level: DifficultyLevel) {
     difficulty.value = level
   }
@@ -162,6 +193,9 @@ export const usePracticeStore = defineStore('practice', () => {
     lastAnswerCorrect.value = false
     isAnswering.value = false
     userSteps.value = []
+    operationErrors.value = []
+    isSignError.value = false
+    signErrorExpected.value = false
     startTime.value = Date.now()
     isAnswering.value = true
     questionIndex.value++
@@ -188,6 +222,7 @@ export const usePracticeStore = defineStore('practice', () => {
       userAnswer: answer,
       isCorrect,
       errorSteps,
+      operationErrors: [],
       totalSteps: result.steps.length
     }
 
@@ -198,6 +233,54 @@ export const usePracticeStore = defineStore('practice', () => {
     userSteps.value = result.steps
 
     return isCorrect
+  }
+
+  function checkAbacusAnswer(abacusState: AbacusState): boolean {
+    if (!currentQuestion.value || !isAnswering.value) return false
+
+    const expectedState = numberToAbacusState(currentQuestion.value.answer, abacusState.decimalPosition)
+    const errors = compareAbacusStates(abacusState, expectedState)
+    
+    operationErrors.value = errors
+    isSignError.value = errors.some(e => e.rodIndex === -1)
+    const signError = errors.find(e => e.rodIndex === -1)
+    signErrorExpected.value = signError ? signError.expectedValue === 1 : false
+
+    const isCorrect = errors.length === 0
+
+    if (isCorrect) {
+      const endTime = Date.now()
+      const result = generateCalculationSteps(
+        currentQuestion.value.num1,
+        currentQuestion.value.num2,
+        currentQuestion.value.operator
+      )
+
+      const record: PracticeRecord = {
+        questionId: currentQuestion.value.id,
+        startTime: startTime.value,
+        endTime,
+        userAnswer: currentQuestion.value.answer,
+        isCorrect: true,
+        errorSteps: [],
+        operationErrors: [],
+        totalSteps: result.steps.length
+      }
+
+      records.value.push(record)
+      isAnswering.value = false
+      showResult.value = true
+      lastAnswerCorrect.value = true
+      userSteps.value = result.steps
+    }
+
+    return isCorrect
+  }
+
+  function clearOperationErrors() {
+    operationErrors.value = []
+    isSignError.value = false
+    signErrorExpected.value = false
   }
 
   function addUserStep(step: StepInfo) {
@@ -212,6 +295,9 @@ export const usePracticeStore = defineStore('practice', () => {
     showResult.value = false
     isAnswering.value = false
     userSteps.value = []
+    operationErrors.value = []
+    isSignError.value = false
+    signErrorExpected.value = false
   }
 
   function getCorrectSteps(): StepInfo[] {
@@ -236,6 +322,10 @@ export const usePracticeStore = defineStore('practice', () => {
     userSteps,
     questionIndex,
     totalQuestions,
+    operationErrors,
+    errorRodIndices,
+    isSignError,
+    signErrorExpected,
     stats,
     accuracy,
     averageTime,
@@ -244,6 +334,8 @@ export const usePracticeStore = defineStore('practice', () => {
     setTotalQuestions,
     generateNewQuestion,
     submitAnswer,
+    checkAbacusAnswer,
+    clearOperationErrors,
     addUserStep,
     resetPractice,
     getCorrectSteps

@@ -91,9 +91,11 @@ import LevelMode from './components/LevelMode.vue'
 import TeacherCenter from './components/TeacherCenter.vue'
 import { useAbacusStore } from './stores/abacus'
 import { usePracticeStore } from './stores/practice'
+import { useTeacherStore } from './stores/teacher'
 
 const abacusStore = useAbacusStore()
 const practiceStore = usePracticeStore()
+const teacherStore = useTeacherStore()
 
 const activeTab = ref('demo')
 
@@ -151,6 +153,31 @@ watch(activeTab, (newTab) => {
     abacusStore.resetAbacus()
   }
 })
+
+watch(
+  () => teacherStore.activeTask,
+  (task) => {
+    if (task) {
+      abacusStore.resetAbacus()
+      if (task.config.type === 'level') {
+        activeTab.value = 'level'
+      } else {
+        if (task.config.difficulty) {
+          practiceStore.setDifficulty(task.config.difficulty)
+        }
+        if (task.config.operators && task.config.operators.length > 0) {
+          practiceStore.setAllowedOperations(task.config.operators)
+        }
+        if (task.config.questionCount) {
+          practiceStore.setTotalQuestions(task.config.questionCount)
+        }
+        practiceStore.resetPractice()
+        practiceStore.generateNewQuestion()
+        activeTab.value = 'practice'
+      }
+    }
+  }
+)
 </script>
 
 <style scoped>

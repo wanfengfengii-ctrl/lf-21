@@ -392,8 +392,7 @@ function isOverdue(deadline: number | undefined): boolean {
 }
 
 function startTask(task: Task) {
-  // 这里可以跳转到练习/关卡页面
-  console.log('开始任务:', task.title)
+  teacherStore.setActiveTask(task.id)
 }
 
 function viewTaskDetail(task: Task) {

@@ -139,6 +139,8 @@ export interface ExportOptions {
   includeWrongQuestions: boolean
   includeProgress: boolean
   dateRange?: { start: number; end: number }
+  groupIds?: string[]
+  studentIds?: string[]
 }
 
 export interface Teacher {

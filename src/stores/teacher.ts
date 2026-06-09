@@ -403,6 +403,7 @@ export const useTeacherStore = defineStore('teacher', () => {
   })
 
   const currentStudent = ref<Student | null>(null)
+  const activeTask = ref<Task | null>(null)
   const students = ref<Student[]>(getMockStudents())
   const groups = ref<StudentGroup[]>(getMockGroups())
   const tasks = ref<Task[]>(getMockTasks())
@@ -592,7 +593,7 @@ export const useTeacherStore = defineStore('teacher', () => {
     return false
   }
 
-  function getStudentProgress(studentId: string): StudentProgress {
+  function getStudentProgress(studentId: string, startTime?: number, endTime?: number): StudentProgress {
     const student = students.value.find(s => s.id === studentId)
     if (!student) {
       return {
@@ -608,6 +609,102 @@ export const useTeacherStore = defineStore('teacher', () => {
         weakRods: [],
         difficultyStats: [],
         lastActiveAt: 0
+      }
+    }
+
+    if (startTime !== undefined || endTime !== undefined) {
+      const studentSubmissions = submissions.value.filter(s => {
+        if (s.studentId !== studentId) return false
+        if (startTime !== undefined && s.submittedAt < startTime) return false
+        if (endTime !== undefined && s.submittedAt > endTime) return false
+        return true
+      })
+
+      const totalQuestions = studentSubmissions.reduce((sum, s) => sum + s.totalQuestions, 0)
+      const correctCount = studentSubmissions.reduce((sum, s) => sum + s.correctCount, 0)
+      const totalTime = studentSubmissions.reduce((sum, s) => sum + s.totalTime, 0)
+      const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
+      const avgTime = totalQuestions > 0 ? totalTime / totalQuestions : 0
+
+      const opStats: Record<OperatorType, { correct: number; total: number }> = {
+        '+': { correct: 0, total: 0 },
+        '-': { correct: 0, total: 0 },
+        '×': { correct: 0, total: 0 },
+        '÷': { correct: 0, total: 0 }
+      }
+
+      const rodStats: Record<number, number> = {}
+
+      const diffStats: Record<DifficultyLevel, { correct: number; total: number }> = {
+        easy: { correct: 0, total: 0 },
+        medium: { correct: 0, total: 0 },
+        hard: { correct: 0, total: 0 }
+      }
+
+      for (const sub of studentSubmissions) {
+        const task = tasks.value.find(t => t.id === sub.taskId)
+        const op = task?.config.operators?.[0] || '+'
+        const diff = task?.config.difficulty || 'easy'
+
+        opStats[op].total += sub.totalQuestions
+        opStats[op].correct += sub.correctCount
+
+        diffStats[diff].total += sub.totalQuestions
+        diffStats[diff].correct += sub.correctCount
+
+        for (const wq of sub.wrongQuestions) {
+          for (const rodIdx of wq.errorRods) {
+            rodStats[rodIdx] = (rodStats[rodIdx] || 0) + 1
+          }
+        }
+      }
+
+      const weakOperations: { operator: OperatorType; accuracy: number; count: number }[] = (
+        Object.entries(opStats) as [OperatorType, { correct: number; total: number }][]
+      )
+        .map(([op, stats]) => ({
+          operator: op,
+          accuracy: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 100,
+          count: stats.total
+        }))
+        .filter(op => op.count > 0)
+        .sort((a, b) => a.accuracy - b.accuracy)
+
+      const weakRods: { rodIndex: number; errorCount: number }[] = Object.entries(rodStats)
+        .map(([rodIndex, errorCount]) => ({
+          rodIndex: parseInt(rodIndex),
+          errorCount
+        }))
+        .sort((a, b) => b.errorCount - a.errorCount)
+        .slice(0, 5)
+
+      const difficultyStats: { difficulty: DifficultyLevel; accuracy: number; count: number }[] = (
+        Object.entries(diffStats) as [DifficultyLevel, { correct: number; total: number }][]
+      ).map(([diff, stats]) => ({
+        difficulty: diff,
+        accuracy: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 100,
+        count: stats.total
+      }))
+
+      const lastActiveAt = studentSubmissions.length > 0
+        ? Math.max(...studentSubmissions.map(s => s.submittedAt))
+        : student.lastLoginAt || 0
+
+      const completedLevels = Math.floor(student.stars / 3)
+
+      return {
+        studentId,
+        totalLevels: levelConfigs.length,
+        completedLevels,
+        totalQuestions,
+        correctCount,
+        accuracy,
+        totalTime,
+        averageTime: avgTime,
+        weakOperations,
+        weakRods,
+        difficultyStats,
+        lastActiveAt
       }
     }
 
@@ -654,8 +751,8 @@ export const useTeacherStore = defineStore('teacher', () => {
     }
   }
 
-  function getStudentProgressList(studentIds: string[]): StudentProgress[] {
-    return studentIds.map(id => getStudentProgress(id))
+  function getStudentProgressList(studentIds: string[], startTime?: number, endTime?: number): StudentProgress[] {
+    return studentIds.map(id => getStudentProgress(id, startTime, endTime))
   }
 
   function getFilteredReport(filter: LearningReportFilter): StudentProgress[] {
@@ -678,7 +775,7 @@ export const useTeacherStore = defineStore('teacher', () => {
       targetStudentIds = students.value.map(s => s.id)
     }
 
-    return getStudentProgressList(targetStudentIds)
+    return getStudentProgressList(targetStudentIds, filter.startTime, filter.endTime)
   }
 
   function getClassComparison(): ClassComparisonData[] {
@@ -915,26 +1012,61 @@ export const useTeacherStore = defineStore('teacher', () => {
     return students.value.filter(s => studentIds.has(s.id))
   }
 
+  function getFilteredStudentIds(options: { groupIds?: string[]; studentIds?: string[] }): string[] {
+    let targetIds: string[] = []
+
+    if (options.studentIds && options.studentIds.length > 0) {
+      targetIds = options.studentIds
+    } else if (options.groupIds && options.groupIds.length > 0) {
+      for (const gid of options.groupIds) {
+        const group = groups.value.find(g => g.id === gid)
+        if (group) {
+          for (const sid of group.studentIds) {
+            if (!targetIds.includes(sid)) {
+              targetIds.push(sid)
+            }
+          }
+        }
+      }
+    } else {
+      targetIds = students.value.map(s => s.id)
+    }
+
+    return targetIds
+  }
+
   function exportData(options: ExportOptions): string {
     const result: Record<string, unknown> = {}
 
+    const targetStudentIds = getFilteredStudentIds({
+      groupIds: options.groupIds,
+      studentIds: options.studentIds
+    })
+    const targetStudents = students.value.filter(s => targetStudentIds.includes(s.id))
+
+    const startTime = options.dateRange?.start
+    const endTime = options.dateRange?.end
+
     if (options.includeScores) {
-      result.scores = students.value.map(s => ({
-        name: s.realName,
-        grade: s.grade || '',
-        totalQuestions: s.totalQuestions,
-        correctQuestions: s.correctQuestions,
-        accuracy: s.totalQuestions > 0 ? Math.round((s.correctQuestions / s.totalQuestions) * 100) : 0,
-        stars: s.stars,
-        totalTime: s.totalPracticeTime,
-        currentStreak: s.currentStreak,
-        bestStreak: s.bestStreak
-      }))
+      result.scores = targetStudents.map(s => {
+        const progress = getStudentProgress(s.id, startTime, endTime)
+        return {
+          name: s.realName,
+          grade: s.grade || '',
+          totalQuestions: progress.totalQuestions,
+          correctQuestions: progress.correctCount,
+          accuracy: progress.accuracy,
+          stars: s.stars,
+          totalTime: progress.totalTime,
+          currentStreak: s.currentStreak,
+          bestStreak: s.bestStreak
+        }
+      })
     }
 
     if (options.includeProgress) {
-      result.progress = students.value.map(s => {
-        const p = getStudentProgress(s.id)
+      result.progress = targetStudents.map(s => {
+        const p = getStudentProgress(s.id, startTime, endTime)
         return {
           name: s.realName,
           completedLevels: p.completedLevels,
@@ -946,7 +1078,14 @@ export const useTeacherStore = defineStore('teacher', () => {
     }
 
     if (options.includeWrongQuestions) {
-      result.wrongQuestions = submissions.value
+      const filteredSubmissions = submissions.value.filter(s => {
+        if (!targetStudentIds.includes(s.studentId)) return false
+        if (startTime !== undefined && s.submittedAt < startTime) return false
+        if (endTime !== undefined && s.submittedAt > endTime) return false
+        return true
+      })
+
+      result.wrongQuestions = filteredSubmissions
         .filter(s => s.wrongQuestions.length > 0)
         .flatMap(s => s.wrongQuestions.map(wq => ({
           studentName: students.value.find(stu => stu.id === s.studentId)?.realName || '',
@@ -1007,6 +1146,18 @@ export const useTeacherStore = defineStore('teacher', () => {
 
   function logoutStudent(): void {
     currentStudent.value = null
+    activeTask.value = null
+  }
+
+  function setActiveTask(taskId: string): void {
+    const task = tasks.value.find(t => t.id === taskId)
+    if (task) {
+      activeTask.value = task
+    }
+  }
+
+  function clearActiveTask(): void {
+    activeTask.value = null
   }
 
   return {
@@ -1057,6 +1208,9 @@ export const useTeacherStore = defineStore('teacher', () => {
     exportData,
     downloadExport,
     loginAsStudent,
-    logoutStudent
+    logoutStudent,
+    activeTask,
+    setActiveTask,
+    clearActiveTask
   }
 })

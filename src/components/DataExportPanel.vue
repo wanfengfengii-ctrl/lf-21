@@ -214,6 +214,14 @@ function handleExport() {
     }
   }
 
+  if (selectedGroups.value.length > 0) {
+    opts.groupIds = selectedGroups.value
+  }
+
+  if (selectedStudents.value.length > 0) {
+    opts.studentIds = selectedStudents.value
+  }
+
   if (!opts.includeScores && !opts.includeWrongQuestions && !opts.includeProgress) {
     message.warning('请至少选择一项导出内容')
     return
